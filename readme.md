@@ -4,4 +4,5 @@ a personal go implementation of the lox interpreter from crafting interpreters b
 
 built for learning, not for production.
 
-## a peak interest in practicing go whilst revisiting the concepts of compilers and interpreters
+_a peak interest in practicing go whilst revisiting the concepts of compilers and interpreters_
+
