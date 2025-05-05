@@ -6,7 +6,7 @@ type TokenType int
 
 const (
     // Single-character tokens.
-    TokenType_LeftParen TokenType = iota // LeftParen
+    TokenType_LeftParen TokenType = iota
     TokenType_RightParen
     TokenType_LeftBrace
     TokenType_RightBrace
@@ -50,4 +50,6 @@ const (
     TokenType_True
     TokenType_Var
     TokenType_While
+
+    TokenType_EOF
 )
