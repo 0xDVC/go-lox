@@ -107,10 +107,25 @@ func (s *Scanner) scanToken() {
 	default:
 		if c >= '0' && c <= '9' {
 			s.scanNumber()
+		} else if isAlpha(c) {
+			s.scanIdentifier()
 		} else {
-			vm.reportError(s.line, "Unexpected character.")
+			vm.reportError(s.line, ErrUnexpectedCharacter)
 		}
 	}
+}
+
+func (s *Scanner) scanIdentifier () {
+	for isAlphaNumeric(s.peek()) {
+		s.advance()
+	}
+
+	text := string(s.source[s.start : s.current])
+	if t, ok := keywords[text]; ok{
+		s.addToken(t)
+		return
+	}
+	s.addToken(TokenType_Identifier)
 }
 
 func (s *Scanner) advance() rune {
@@ -162,7 +177,7 @@ func (s *Scanner) scanString() {
 	}
 
 	if s.isAtEnd() {
-		vm.reportError(s.line, "Unterminated string.")
+		vm.reportError(s.line, ErrUnterminatedString)
 	}
 
 	s.advance()
@@ -173,6 +188,15 @@ func (s *Scanner) scanString() {
 
 func isDigit(c rune) bool {
 	return c >= '0' && c <= '9'
+}
+func isAlpha(c rune) bool {
+	return c >= 'a' && c <= 'z' ||
+	c >= 'A' && c <= 'Z' ||
+	c == '_'
+}
+
+func isAlphaNumeric(c rune) bool {
+	return isAlpha(c) || isDigit(c) 
 }
 
 func (s *Scanner) scanNumber() {
@@ -189,12 +213,10 @@ func (s *Scanner) scanNumber() {
 		}
 	}
 
-	// TODO: Report a parsing error if it occurs
 	text := string(s.source[s.start:s.current])
 	num, err := strconv.ParseFloat(text, 64)
 	if err != nil {
-		//TODO: use the built-in erro interface instead of plain string literals
-		vm.reportError(s.line, "Invalid number literal.")
+		vm.reportError(s.line, ErrInvalidNumberLiteral)
 		return
 	}
 	s.addTokenWithLiteral(TokenType_Number, num)
