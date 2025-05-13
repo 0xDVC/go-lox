@@ -1,0 +1,6 @@
+var test = 2;
+
+/* multiline comment */ test = 42;
+test = 32; // single line comment
+
+/* unterminated

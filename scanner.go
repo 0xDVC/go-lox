@@ -89,12 +89,14 @@ func (s *Scanner) scanToken() {
 	case '/':
 		// If you encouter two slashes in a row, consume a comment until the end of the line
 		if s.match('/') {
-			for s.peek() != '\n' && !s.isAtEnd() {
-				s.advance()
-			}
-		} else {
-			s.addToken(TokenType_Slash)
+			s.consumeLineComment()
+			break;
 		}
+		if s.match('*') {
+			s.consumeMultiLineComment()
+			break;
+		}
+		s.addToken(TokenType_Slash)
 	case ' ', '\r', '\t':
 		// TODO do we actually need it?
 		break
@@ -113,6 +115,31 @@ func (s *Scanner) scanToken() {
 			vm.reportError(s.line, ErrUnexpectedCharacter)
 		}
 	}
+}
+
+func (s *Scanner) consumeLineComment() {
+	for s.peek() != '\n' && !s.isAtEnd() {
+		s.advance()
+	}
+}
+
+func (s *Scanner) consumeMultiLineComment() {
+	for !s.isAtEnd() {
+		switch c := s.peek(); c {
+		case '\n':
+			s.line++
+			s.advance()
+		case '*':
+			if s.peekNext() == '/' {
+				s.current += 2
+				return 
+			}
+		default:
+			s.advance()
+		}
+	}
+	vm.reportError(s.line, ErrUnterminatedComment)
+	
 }
 
 func (s *Scanner) scanIdentifier () {
