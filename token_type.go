@@ -56,6 +56,7 @@ const (
 
 var keywords map[string]TokenType = map[string]TokenType{
 	"and":    TokenType_And,
+	"false":  TokenType_False,
 	"or":     TokenType_Or,
 	"class":  TokenType_Class,
 	"else":   TokenType_Else,
