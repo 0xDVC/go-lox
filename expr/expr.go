@@ -26,10 +26,26 @@ type Grouping[R any] struct {
 }
 
 type Literal[R any] struct {
-	Value R
+	Value any
 }
 
 type Unary[R any] struct {
 	Operator token.Token
 	Right    Expr[R]
+}
+
+func (e Unary[R]) Accept(visitor Visitor[R]) R {
+	return visitor.VisitUnaryExpr(e)
+} 
+
+func (e Literal[R]) Accept(visitor Visitor[R]) R {
+	return visitor.VisitLiteralExpr(e)
+}
+
+func (e Grouping[R]) Accept(visitor Visitor[R]) R {
+	return visitor.VisitGroupingExpr(e)
+}
+
+func (e Binary[R]) Accept(visitor Visitor[R]) R {
+	return visitor.VisitBinaryExpr(e)
 }

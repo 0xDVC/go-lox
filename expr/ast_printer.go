@@ -16,7 +16,7 @@ func (p *AstPrinter) VisitBinaryExpr(expr Binary[string]) string {
 	return p.parenthesize(expr.Operator.Lexeme, expr.Left, expr.Right)
 }
 
-func (p *AstPrinter) VisitGroupingExpr(expr Grouping[any]) string {
+func (p *AstPrinter) VisitGroupingExpr(expr Grouping[string]) string {
 	return p.parenthesize("group", expr.Expression)
 }
 
@@ -39,7 +39,7 @@ func (p *AstPrinter) VisitUnaryExpr(expr Unary[string]) string {
 	return p.parenthesize(expr.Operator.Lexeme, expr.Right)
 }
 
-func (p *AstPrinter) parenthesize(name string, exprs ...Expr[string]) {
+func (p *AstPrinter) parenthesize(name string, exprs ...Expr[string]) string {
 	var builder strings.Builder
 
 	builder.WriteRune('(')
