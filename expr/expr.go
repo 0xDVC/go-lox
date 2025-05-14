@@ -1,4 +1,8 @@
-package main
+package expr
+
+import (
+	"github.com/0xdvc/go-lox/token"
+)
 
 type Expr[R any] interface {
 	Accept(Visitor[R]) R
@@ -13,7 +17,7 @@ type Visitor[R any] interface {
 
 type Binary[R any] struct {
 	Left     Expr[R]
-	Operator Token
+	Operator token.Token
 	Right    Expr[R]
 }
 
@@ -26,6 +30,6 @@ type Literal[R any] struct {
 }
 
 type Unary[R any] struct {
-	Operator Token
+	Operator token.Token
 	Right    Expr[R]
 }

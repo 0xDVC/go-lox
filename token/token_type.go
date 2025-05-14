@@ -1,6 +1,6 @@
 //go:generate stringer -type=TokenType -trimprefix=TokenType_
 
-package main
+package token
 
 type TokenType int
 
