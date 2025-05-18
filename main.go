@@ -19,6 +19,3 @@ func main() {
 		vm.RunPrompt()
 	}
 }
-
-
-
