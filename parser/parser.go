@@ -33,7 +33,27 @@ func (p *Parser) Parse() (expr.Expr, error) {
 }
 
 func (p *Parser) expression() (expr.Expr, error) {
-	return p.equality()
+	return p.comma()
+}
+
+func (p *Parser) comma() (expr.Expr, error) {
+	ex, err := p.equality()
+	if err != nil {
+		return ex, err
+	}
+
+	for p.match(token.TokenType_Comma) {
+		right, err := p.equality()
+		if err != nil {
+			return right, err
+		}
+		ex = expr.Comma{
+			Left:  ex,
+			Right: right,
+		}
+	}
+
+	return ex, nil
 }
 
 func (p *Parser) equality() (expr.Expr, error) {

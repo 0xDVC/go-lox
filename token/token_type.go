@@ -17,6 +17,8 @@ const (
 	TokenType_Semicolon
 	TokenType_Slash
 	TokenType_Star
+	TokenType_Question
+	TokenType_Colon
 
 	// One or two character tokens.
 	TokenType_Bang

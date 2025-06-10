@@ -9,6 +9,10 @@ func (e Binary) String() string {
 	return parenthesize(e.Operator.Lexeme, e.Left, e.Right)
 }
 
+func (e Comma) String() string {
+	return parenthesize(",", e.Left, e.Right)
+}
+
 func (e Grouping) String() string {
 	return parenthesize("group", e.Expression)
 }

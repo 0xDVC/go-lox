@@ -12,6 +12,11 @@ type Binary struct {
 	Right    Expr
 }
 
+type Comma struct {
+	Left  Expr
+	Right Expr
+}
+
 type Grouping struct {
 	Expression Expr
 }
