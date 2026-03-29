@@ -12,6 +12,8 @@ type StmtVisitor interface {
 	VisitPrintStmt(stmt Print)
 	VisitVarStmt(stmt Var)
 	VisitBlockStmt(stmt Block)
+	VisitIfStmt(stmt If)
+	VisitWhileStmt(stmt While)
 }
 
 // Stmt is the interface all statement AST nodes implement.
@@ -43,4 +45,19 @@ type Var struct {
 // Creates a new scope — this is where lexical scoping comes from.
 type Block struct {
 	Statements []Stmt
+}
+
+// If represents conditional execution.
+// ElseBranch is nil when there's no else clause.
+type If struct {
+	Condition  expr.Expr
+	ThenBranch Stmt
+	ElseBranch Stmt // nil if no else
+}
+
+// While represents a loop that runs as long as the condition is truthy.
+// `for` loops also become While nodes — the parser desugars them.
+type While struct {
+	Condition expr.Expr
+	Body      Stmt
 }

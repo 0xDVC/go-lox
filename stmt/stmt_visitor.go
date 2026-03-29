@@ -22,3 +22,11 @@ func (s Var) Accept(visitor StmtVisitor) {
 func (s Block) Accept(visitor StmtVisitor) {
 	visitor.VisitBlockStmt(s)
 }
+
+func (s If) Accept(visitor StmtVisitor) {
+	visitor.VisitIfStmt(s)
+}
+
+func (s While) Accept(visitor StmtVisitor) {
+	visitor.VisitWhileStmt(s)
+}

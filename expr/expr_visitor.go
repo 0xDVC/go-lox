@@ -27,3 +27,7 @@ func (v Variable) Accept(visitor Visitor) interface{} {
 func (a Assign) Accept(visitor Visitor) interface{} {
 	return visitor.VisitAssignExpr(a)
 }
+
+func (l Logical) Accept(visitor Visitor) interface{} {
+	return visitor.VisitLogicalExpr(l)
+}

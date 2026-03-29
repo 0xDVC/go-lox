@@ -72,6 +72,8 @@ func (s *Scanner) scanToken() {
 		s.addToken(token.TokenType_Semicolon, string(c))
 	case '*':
 		s.addToken(token.TokenType_Star, string(c))
+	case '%':
+		s.addToken(token.TokenType_Percent, string(c))
 	case '!':
 		if s.match('=') {
 			s.addToken(token.TokenType_BangEqual, "!=")

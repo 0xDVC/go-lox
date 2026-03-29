@@ -85,6 +85,22 @@ func (i *Interpreter) executeBlock(statements []stmt.Stmt, env *Environment) {
 	}
 }
 
+// VisitIfStmt evaluates the condition and executes the appropriate branch.
+func (i *Interpreter) VisitIfStmt(s stmt.If) {
+	if i.isTruthy(i.evaluate(s.Condition)) {
+		i.execute(s.ThenBranch)
+	} else if s.ElseBranch != nil {
+		i.execute(s.ElseBranch)
+	}
+}
+
+// VisitWhileStmt loops as long as the condition is truthy.
+func (i *Interpreter) VisitWhileStmt(s stmt.While) {
+	for i.isTruthy(i.evaluate(s.Condition)) {
+		i.execute(s.Body)
+	}
+}
+
 // --- Expression visitors ---
 
 func (i *Interpreter) VisitLiteralExpr(e expr.Literal) interface{} {
@@ -127,6 +143,12 @@ func (i *Interpreter) VisitBinaryExpr(e expr.Binary) interface{} {
 	case token.TokenType_Star:
 		l, r := i.checkNumberOperands(e.Operator, left, right)
 		return l * r
+	case token.TokenType_Percent:
+		l, r := i.checkNumberOperands(e.Operator, left, right)
+		if r == 0 {
+			panic(&RuntimeError{Token: e.Operator, Message: "Division by zero."})
+		}
+		return float64(int(l) % int(r))
 	case token.TokenType_Plus:
 		if l, ok := left.(float64); ok {
 			if r, ok := right.(float64); ok {
@@ -161,6 +183,25 @@ func (i *Interpreter) VisitBinaryExpr(e expr.Binary) interface{} {
 
 func (i *Interpreter) VisitCommaExpr(e expr.Comma) interface{} {
 	i.evaluate(e.Left)
+	return i.evaluate(e.Right)
+}
+
+// VisitLogicalExpr implements short-circuit evaluation.
+// Returns the value that determined the result, not true/false.
+// `nil or "default"` → "default"   |   "yes" and "no" → "no"
+func (i *Interpreter) VisitLogicalExpr(e expr.Logical) interface{} {
+	left := i.evaluate(e.Left)
+
+	if e.Operator.TokenType == token.TokenType_Or {
+		if i.isTruthy(left) {
+			return left // short-circuit: left is truthy, skip right
+		}
+	} else { // and
+		if !i.isTruthy(left) {
+			return left // short-circuit: left is falsy, skip right
+		}
+	}
+
 	return i.evaluate(e.Right)
 }
 

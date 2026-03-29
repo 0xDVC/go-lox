@@ -17,6 +17,7 @@ const (
 	TokenType_Semicolon
 	TokenType_Slash
 	TokenType_Star
+	TokenType_Percent
 	TokenType_Question
 	TokenType_Colon
 

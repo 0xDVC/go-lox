@@ -10,6 +10,7 @@ type Visitor interface {
 	VisitCommaExpr(expr Comma) interface{}
 	VisitVariableExpr(expr Variable) interface{}
 	VisitAssignExpr(expr Assign) interface{}
+	VisitLogicalExpr(expr Logical) interface{}
 }
 
 type Expr interface {
@@ -50,4 +51,14 @@ type Variable struct {
 type Assign struct {
 	Name  *token.Token
 	Value Expr
+}
+
+// Logical represents `and` / `or` expressions.
+// Unlike Binary, these short-circuit: `false and crash()` never calls crash().
+// They return the value that determined the result, not just true/false.
+// `nil or "default"` → "default", `"yes" and "no"` → "no"
+type Logical struct {
+	Left     Expr
+	Operator *token.Token
+	Right    Expr
 }

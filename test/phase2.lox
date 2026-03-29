@@ -1,0 +1,61 @@
+// Phase 2: Control Flow
+
+// --- if/else ---
+if (true) print "if works";
+
+if (false) print "FAIL";
+else print "else works";
+
+// Nested if/else (dangling else binds to nearest if)
+if (true)
+  if (false)
+    print "FAIL";
+  else
+    print "dangling else binds correctly";
+
+// --- logical operators ---
+// Short-circuit: or
+print "or:" ;
+print nil or "default";
+print false or true;
+print "first" or "second";
+
+// Short-circuit: and
+print "and:";
+print nil and "never";
+print "first" and "second";
+print true and false;
+
+// --- while ---
+var count = 0;
+while (count < 5) {
+  count = count + 1;
+}
+print count;
+
+// --- for loop ---
+var sum = 0;
+for (var i = 1; i <= 10; i = i + 1) {
+  sum = sum + i;
+}
+print sum;
+
+// --- for loop with no initializer ---
+var j = 0;
+for (; j < 3; j = j + 1) {
+  // empty body
+}
+print j;
+
+// --- modulo ---
+print 17 % 5;
+print 10 % 3;
+print 100 % 10;
+
+// --- FizzBuzz! ---
+for (var i = 1; i <= 20; i = i + 1) {
+  if (i % 15 == 0) print "FizzBuzz";
+  else if (i % 3 == 0) print "Fizz";
+  else if (i % 5 == 0) print "Buzz";
+  else print i;
+}
