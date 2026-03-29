@@ -8,12 +8,8 @@ a personal go implementation of the lox interpreter from crafting interpreters b
   <em>current progress on what I've learnt so far</em>
 </div>
 
-
-
-
 built for learning, not for production.
 
-current read: ***chapter 6***
+current read: **_chapter 7_**
 
 _a peak interest in practicing go whilst revisiting the concepts of compilers and interpreters_
-

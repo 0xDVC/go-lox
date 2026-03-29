@@ -1,0 +1,45 @@
+// Phase 1: Statements & State
+
+// Basic print
+print "hello, lox!";
+
+// Variable declaration and access
+var x = 10;
+print x;
+
+// Uninitialized variable (should be nil)
+var y;
+print y;
+
+// Assignment
+x = 42;
+print x;
+
+// Block scoping
+var a = "global a";
+var b = "global b";
+{
+  var a = "block a";
+  print a;
+  print b;
+  b = "modified b";
+}
+print a;
+print b;
+
+// Nested blocks
+var depth = "outer";
+{
+  var depth = "middle";
+  {
+    var depth = "inner";
+    print depth;
+  }
+  print depth;
+}
+print depth;
+
+// Assignment is an expression — returns the value
+var c;
+print c = 99;
+print c;

@@ -11,7 +11,16 @@ import (
 )
 
 type Lox struct {
-	hadError bool
+	interpreter     *Interpreter
+	hadError        bool
+	hadRuntimeError bool
+}
+
+// NewLox creates a new Lox VM with a persistent interpreter.
+func NewLox() *Lox {
+	return &Lox{
+		interpreter: NewInterpreter(),
+	}
 }
 
 func (l *Lox) ReportParseError(err parser.ParseError) {
@@ -20,6 +29,10 @@ func (l *Lox) ReportParseError(err parser.ParseError) {
 	} else {
 		l.report(err.Token.Line, " at '"+err.Token.Lexeme+"'", err)
 	}
+}
+
+func (l *Lox) ReportError(line int, err error) {
+	l.report(line, "", err)
 }
 
 func (l *Lox) RunFile(path string) error {
@@ -32,6 +45,9 @@ func (l *Lox) RunFile(path string) error {
 	if l.hadError {
 		os.Exit(65)
 	}
+	if l.hadRuntimeError {
+		os.Exit(70)
+	}
 	return nil
 }
 
@@ -40,39 +56,50 @@ func (l *Lox) RunPrompt() {
 
 	for {
 		fmt.Print("> ")
-		if ok := input.Scan(); !ok {
+		if !input.Scan() {
 			break
 		}
 		line := input.Text()
 		l.run(line)
+		// Reset error flags between REPL lines — one bad line shouldn't kill the session
 		l.hadError = false
+		l.hadRuntimeError = false
 	}
 }
 
 func (l *Lox) run(source string) {
-	scanner := scanner.NewScanner(source)
-	scanner.ScanTokens()
+	s := scanner.NewScanner(source, l)
+	tokens := s.ScanTokens()
 
-	parser := parser.NewParser(l, scanner.Tokens)
-	ex, err := parser.Parse()
-	if err != nil {
-		l.hadError = true
-		if parseErr, ok := err.(error); ok {
-			l.ReportError(1, parseErr)
-		} else {
-			l.ReportError(1, fmt.Errorf("unknown parse error"))
-		}
+	p := parser.NewParser(l, tokens)
+	statements := p.Parse()
+
+	// Don't interpret if there were parse errors
+	if l.hadError {
 		return
 	}
 
-	fmt.Println(ex.String())
-}
+	// Catch runtime errors (panics) from the interpreter
+	defer func() {
+		if r := recover(); r != nil {
+			if re, ok := r.(*RuntimeError); ok {
+				l.ReportRuntimeError(re)
+				l.hadRuntimeError = true
+			} else {
+				fmt.Println("Unexpected panic:", r)
+			}
+		}
+	}()
 
-func (l *Lox) ReportError(line int, err error) {
-	l.report(line, "", err)
+	l.interpreter.Interpret(statements)
 }
 
 func (l *Lox) report(line int, where string, err error) {
-	fmt.Printf("[line %d] Error %s: %s\n", line, where, err)
+	fmt.Printf("[line %d] Error%s: %s\n", line, where, err)
 	l.hadError = true
+}
+
+func (l *Lox) ReportRuntimeError(err *RuntimeError) {
+	fmt.Printf("[line %d] Runtime Error: %s\n", err.Token.Line, err.Message)
+	l.hadRuntimeError = true
 }

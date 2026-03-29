@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	vm := lox.Lox{}
+	vm := lox.NewLox()
 	if len(os.Args) > 2 {
 		fmt.Println("Usage: golox [script]")
 		os.Exit(64)
