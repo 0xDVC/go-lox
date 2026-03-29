@@ -11,6 +11,7 @@ type Visitor interface {
 	VisitVariableExpr(expr Variable) interface{}
 	VisitAssignExpr(expr Assign) interface{}
 	VisitLogicalExpr(expr Logical) interface{}
+	VisitCallExpr(expr Call) interface{}
 }
 
 type Expr interface {
@@ -41,24 +42,26 @@ type Comma struct {
 	Right Expr
 }
 
-// Variable reads a variable by name. `print x;` — the `x` is this.
 type Variable struct {
 	Name *token.Token
 }
 
-// Assign writes a value to a variable. `x = 42` — an expression, not a statement.
-// Returns the assigned value so you can chain: `a = b = 5`
+// Assign returns the assigned value so you can chain: a = b = 5
 type Assign struct {
 	Name  *token.Token
 	Value Expr
 }
 
-// Logical represents `and` / `or` expressions.
-// Unlike Binary, these short-circuit: `false and crash()` never calls crash().
-// They return the value that determined the result, not just true/false.
-// `nil or "default"` → "default", `"yes" and "no"` → "no"
+// Logical short-circuits: `false and crash()` never calls crash().
+// Returns the value that determined the result, not just true/false.
 type Logical struct {
 	Left     Expr
 	Operator *token.Token
 	Right    Expr
+}
+
+type Call struct {
+	Callee    Expr
+	Paren     *token.Token // closing ')' for error reporting
+	Arguments []Expr
 }

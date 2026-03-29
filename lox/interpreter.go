@@ -18,43 +18,54 @@ func (e *RuntimeError) Error() string {
 }
 
 type Interpreter struct {
+	globals     *Environment
 	environment *Environment
+	locals      map[expr.Expr]int
 }
 
 func NewInterpreter() *Interpreter {
+	globals := NewEnvironment()
+	globals.Define("clock", ClockNative)
+
 	return &Interpreter{
-		environment: NewEnvironment(),
+		globals:     globals,
+		environment: globals,
+		locals:      make(map[expr.Expr]int),
 	}
 }
 
-// Interpret executes a list of statements — this is the entry point.
+func (i *Interpreter) resolve(e expr.Expr, depth int) {
+	i.locals[e] = depth
+}
+
+func (i *Interpreter) lookUpVariable(name *token.Token, e expr.Expr) any {
+	if distance, ok := i.locals[e]; ok {
+		return i.environment.GetAt(distance, name.Lexeme)
+	}
+	return i.globals.Get(name)
+}
+
 func (i *Interpreter) Interpret(statements []stmt.Stmt) {
 	for _, s := range statements {
 		i.execute(s)
 	}
 }
 
-// execute runs a single statement by dispatching to the visitor.
 func (i *Interpreter) execute(s stmt.Stmt) {
 	s.Accept(i)
 }
 
 // --- Statement visitors ---
 
-// VisitExpressionStmt evaluates the expression and discards the result.
-// Example: `someFunction();` — we call the function for its side effect.
 func (i *Interpreter) VisitExpressionStmt(s stmt.Expression) {
 	i.evaluate(s.Expression)
 }
 
-// VisitPrintStmt evaluates the expression and prints the result.
 func (i *Interpreter) VisitPrintStmt(s stmt.Print) {
 	value := i.evaluate(s.Expression)
 	fmt.Println(i.stringify(value))
 }
 
-// VisitVarStmt declares a variable. If there's an initializer, evaluate it.
-// Otherwise the variable is nil (Lox's version of undefined).
 func (i *Interpreter) VisitVarStmt(s stmt.Var) {
 	var value any
 	if s.Initializer != nil {
@@ -63,16 +74,10 @@ func (i *Interpreter) VisitVarStmt(s stmt.Var) {
 	i.environment.Define(s.Name.Lexeme, value)
 }
 
-// VisitBlockStmt executes a list of statements in a new scope.
-// Creates a new environment enclosed by the current one, executes the
-// statements, then restores the previous environment.
 func (i *Interpreter) VisitBlockStmt(s stmt.Block) {
 	i.executeBlock(s.Statements, NewEnclosedEnvironment(i.environment))
 }
 
-// executeBlock runs statements in a given environment, restoring the
-// previous environment when done. The `defer` ensures restoration even
-// if a runtime error (panic) occurs mid-block.
 func (i *Interpreter) executeBlock(statements []stmt.Stmt, env *Environment) {
 	previous := i.environment
 	defer func() {
@@ -85,7 +90,6 @@ func (i *Interpreter) executeBlock(statements []stmt.Stmt, env *Environment) {
 	}
 }
 
-// VisitIfStmt evaluates the condition and executes the appropriate branch.
 func (i *Interpreter) VisitIfStmt(s stmt.If) {
 	if i.isTruthy(i.evaluate(s.Condition)) {
 		i.execute(s.ThenBranch)
@@ -94,14 +98,50 @@ func (i *Interpreter) VisitIfStmt(s stmt.If) {
 	}
 }
 
-// VisitWhileStmt loops as long as the condition is truthy.
 func (i *Interpreter) VisitWhileStmt(s stmt.While) {
 	for i.isTruthy(i.evaluate(s.Condition)) {
 		i.execute(s.Body)
 	}
 }
 
+func (i *Interpreter) VisitFunctionStmt(s stmt.Function) {
+	function := NewLoxFunction(s, i.environment)
+	i.environment.Define(s.Name.Lexeme, function)
+}
+
+// VisitReturnStmt panics with ReturnValue to unwind back to LoxFunction.Call().
+func (i *Interpreter) VisitReturnStmt(s stmt.Return) {
+	var value any
+	if s.Value != nil {
+		value = i.evaluate(s.Value)
+	}
+	panic(ReturnValue{Value: value})
+}
+
 // --- Expression visitors ---
+
+func (i *Interpreter) VisitCallExpr(e expr.Call) interface{} {
+	callee := i.evaluate(e.Callee)
+
+	var arguments []any
+	for _, arg := range e.Arguments {
+		arguments = append(arguments, i.evaluate(arg))
+	}
+
+	function, ok := callee.(LoxCallable)
+	if !ok {
+		panic(&RuntimeError{Token: e.Paren, Message: "Can only call functions and classes."})
+	}
+
+	if len(arguments) != function.Arity() {
+		panic(&RuntimeError{
+			Token:   e.Paren,
+			Message: fmt.Sprintf("Expected %d arguments but got %d.", function.Arity(), len(arguments)),
+		})
+	}
+
+	return function.Call(i, arguments)
+}
 
 func (i *Interpreter) VisitLiteralExpr(e expr.Literal) interface{} {
 	return e.Value
@@ -186,35 +226,35 @@ func (i *Interpreter) VisitCommaExpr(e expr.Comma) interface{} {
 	return i.evaluate(e.Right)
 }
 
-// VisitLogicalExpr implements short-circuit evaluation.
-// Returns the value that determined the result, not true/false.
-// `nil or "default"` → "default"   |   "yes" and "no" → "no"
+// VisitLogicalExpr short-circuits: returns the value that determined the result.
 func (i *Interpreter) VisitLogicalExpr(e expr.Logical) interface{} {
 	left := i.evaluate(e.Left)
 
 	if e.Operator.TokenType == token.TokenType_Or {
 		if i.isTruthy(left) {
-			return left // short-circuit: left is truthy, skip right
+			return left
 		}
-	} else { // and
+	} else {
 		if !i.isTruthy(left) {
-			return left // short-circuit: left is falsy, skip right
+			return left
 		}
 	}
 
 	return i.evaluate(e.Right)
 }
 
-// VisitVariableExpr looks up a variable in the current environment chain.
 func (i *Interpreter) VisitVariableExpr(e expr.Variable) interface{} {
-	return i.environment.Get(e.Name)
+	return i.lookUpVariable(e.Name, e)
 }
 
-// VisitAssignExpr assigns a value to an existing variable.
-// Returns the assigned value — assignment is an expression in Lox.
 func (i *Interpreter) VisitAssignExpr(e expr.Assign) interface{} {
 	value := i.evaluate(e.Value)
-	i.environment.Assign(e.Name, value)
+
+	if distance, ok := i.locals[e]; ok {
+		i.environment.AssignAt(distance, e.Name.Lexeme, value)
+	} else {
+		i.globals.Assign(e.Name, value)
+	}
 	return value
 }
 
@@ -244,8 +284,6 @@ func (i *Interpreter) isEqual(a, b interface{}) bool {
 	return a == b
 }
 
-// checkNumberOperands verifies both operands are float64 and returns them.
-// Panics with a RuntimeError if not — this is how Lox reports type errors.
 func (i *Interpreter) checkNumberOperands(operator *token.Token, left, right interface{}) (float64, float64) {
 	l, lok := left.(float64)
 	r, rok := right.(float64)
@@ -260,8 +298,13 @@ func (i *Interpreter) stringify(obj interface{}) string {
 		return "nil"
 	}
 	if num, ok := obj.(float64); ok {
-		text := fmt.Sprintf("%g", num)
-		return text
+		return fmt.Sprintf("%g", num)
+	}
+	if fn, ok := obj.(*LoxFunction); ok {
+		return fn.String()
+	}
+	if fn, ok := obj.(*NativeFunction); ok {
+		return fn.String()
 	}
 	return fmt.Sprintf("%v", obj)
 }

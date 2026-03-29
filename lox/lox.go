@@ -16,7 +16,6 @@ type Lox struct {
 	hadRuntimeError bool
 }
 
-// NewLox creates a new Lox VM with a persistent interpreter.
 func NewLox() *Lox {
 	return &Lox{
 		interpreter: NewInterpreter(),
@@ -28,6 +27,14 @@ func (l *Lox) ReportParseError(err parser.ParseError) {
 		l.report(err.Token.Line, " at end", err)
 	} else {
 		l.report(err.Token.Line, " at '"+err.Token.Lexeme+"'", err)
+	}
+}
+
+func (l *Lox) ReportResolveError(tok *token.Token, message string) {
+	if tok.TokenType == token.TokenType_EOF {
+		l.report(tok.Line, " at end", fmt.Errorf("%s", message))
+	} else {
+		l.report(tok.Line, " at '"+tok.Lexeme+"'", fmt.Errorf("%s", message))
 	}
 }
 
@@ -61,7 +68,6 @@ func (l *Lox) RunPrompt() {
 		}
 		line := input.Text()
 		l.run(line)
-		// Reset error flags between REPL lines — one bad line shouldn't kill the session
 		l.hadError = false
 		l.hadRuntimeError = false
 	}
@@ -74,12 +80,17 @@ func (l *Lox) run(source string) {
 	p := parser.NewParser(l, tokens)
 	statements := p.Parse()
 
-	// Don't interpret if there were parse errors
 	if l.hadError {
 		return
 	}
 
-	// Catch runtime errors (panics) from the interpreter
+	resolver := NewResolver(l.interpreter, l)
+	resolver.Resolve(statements)
+
+	if l.hadError {
+		return
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
 			if re, ok := r.(*RuntimeError); ok {

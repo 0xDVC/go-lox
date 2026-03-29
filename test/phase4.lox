@@ -1,0 +1,55 @@
+// Phase 4: Resolving & Binding
+
+// The closure scoping bug that the resolver fixes:
+var a = "global";
+{
+  fun showA() {
+    print a;
+  }
+  showA();
+  var a = "block";
+  showA();
+}
+
+// Closures still work correctly
+fun makeCounter() {
+  var count = 0;
+  fun increment() {
+    count = count + 1;
+    return count;
+  }
+  return increment;
+}
+var c = makeCounter();
+print c();
+print c();
+
+// Nested closures
+fun outer() {
+  var x = "outer";
+  fun middle() {
+    fun inner() {
+      print x;
+    }
+    inner();
+  }
+  middle();
+}
+outer();
+
+// Fibonacci still works (recursion + resolver)
+fun fib(n) {
+  if (n <= 1) return n;
+  return fib(n - 1) + fib(n - 2);
+}
+print fib(10);
+
+// Global variables work without resolver (fallback to globals)
+var global = "i am global";
+print global;
+
+// FizzBuzz still works
+for (var i = 1; i <= 5; i = i + 1) {
+  if (i % 3 == 0) print "Fizz";
+  else print i;
+}

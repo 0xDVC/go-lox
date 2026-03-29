@@ -31,3 +31,7 @@ func (a Assign) Accept(visitor Visitor) interface{} {
 func (l Logical) Accept(visitor Visitor) interface{} {
 	return visitor.VisitLogicalExpr(l)
 }
+
+func (c Call) Accept(visitor Visitor) interface{} {
+	return visitor.VisitCallExpr(c)
+}

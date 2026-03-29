@@ -29,7 +29,6 @@ func NewParser(vm vm, tokens []*token.Token) *Parser {
 	return &Parser{vm: vm, tokens: tokens}
 }
 
-// Parse returns a list of statements — a program is just a sequence of declarations.
 func (p *Parser) Parse() []stmt.Stmt {
 	var statements []stmt.Stmt
 	for !p.isAtEnd() {
@@ -41,26 +40,27 @@ func (p *Parser) Parse() []stmt.Stmt {
 	return statements
 }
 
-// declaration → varDecl | statement
-// This is the top-level rule. If parsing fails, we synchronize and keep going.
+// declaration recovers from parse errors via synchronize.
 func (p *Parser) declaration() stmt.Stmt {
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(ParseError); ok {
 				p.synchronize()
 			} else {
-				panic(r) // re-panic if it's not a ParseError
+				panic(r)
 			}
 		}
 	}()
 
+	if p.match(token.TokenType_Fun) {
+		return p.funDeclaration("function")
+	}
 	if p.match(token.TokenType_Var) {
 		return p.varDeclaration()
 	}
 	return p.statement()
 }
 
-// varDeclaration → "var" IDENTIFIER ( "=" expression )? ";"
 func (p *Parser) varDeclaration() stmt.Stmt {
 	name := p.consume(token.TokenType_Identifier, "Expect variable name.")
 
@@ -73,7 +73,6 @@ func (p *Parser) varDeclaration() stmt.Stmt {
 	return stmt.Var{Name: name, Initializer: initializer}
 }
 
-// statement → printStmt | ifStmt | whileStmt | forStmt | block | exprStmt
 func (p *Parser) statement() stmt.Stmt {
 	if p.match(token.TokenType_If) {
 		return p.ifStatement()
@@ -84,6 +83,9 @@ func (p *Parser) statement() stmt.Stmt {
 	if p.match(token.TokenType_While) {
 		return p.whileStatement()
 	}
+	if p.match(token.TokenType_Return) {
+		return p.returnStatement()
+	}
 	if p.match(token.TokenType_For) {
 		return p.forStatement()
 	}
@@ -93,7 +95,6 @@ func (p *Parser) statement() stmt.Stmt {
 	return p.expressionStatement()
 }
 
-// ifStatement → "if" "(" expression ")" statement ( "else" statement )?
 func (p *Parser) ifStatement() stmt.Stmt {
 	p.consume(token.TokenType_LeftParen, "Expect '(' after 'if'.")
 	condition := p.expression()
@@ -101,7 +102,6 @@ func (p *Parser) ifStatement() stmt.Stmt {
 
 	thenBranch := p.statement()
 
-	// The else eagerly binds to the nearest if — no dangling else ambiguity
 	var elseBranch stmt.Stmt
 	if p.match(token.TokenType_Else) {
 		elseBranch = p.statement()
@@ -110,7 +110,6 @@ func (p *Parser) ifStatement() stmt.Stmt {
 	return stmt.If{Condition: condition, ThenBranch: thenBranch, ElseBranch: elseBranch}
 }
 
-// whileStatement → "while" "(" expression ")" statement
 func (p *Parser) whileStatement() stmt.Stmt {
 	p.consume(token.TokenType_LeftParen, "Expect '(' after 'while'.")
 	condition := p.expression()
@@ -120,15 +119,10 @@ func (p *Parser) whileStatement() stmt.Stmt {
 	return stmt.While{Condition: condition, Body: body}
 }
 
-// forStatement → "for" "(" (varDecl | exprStmt | ";") expression? ";" expression? ")" statement
-//
-// This is the desugaring magic. We parse the three for-loop components,
-// then build the equivalent while loop from existing AST nodes.
-// The interpreter never sees a "for" — only blocks and while loops.
+// forStatement desugars `for` into a while loop wrapped in a block.
 func (p *Parser) forStatement() stmt.Stmt {
 	p.consume(token.TokenType_LeftParen, "Expect '(' after 'for'.")
 
-	// 1. Initializer: var decl, expression, or nothing
 	var initializer stmt.Stmt
 	if p.match(token.TokenType_Semicolon) {
 		initializer = nil
@@ -138,39 +132,31 @@ func (p *Parser) forStatement() stmt.Stmt {
 		initializer = p.expressionStatement()
 	}
 
-	// 2. Condition: expression or nothing (defaults to true = infinite loop)
 	var condition expr.Expr
 	if !p.check(token.TokenType_Semicolon) {
 		condition = p.expression()
 	}
 	p.consume(token.TokenType_Semicolon, "Expect ';' after loop condition.")
 
-	// 3. Increment: expression or nothing
 	var increment expr.Expr
 	if !p.check(token.TokenType_RightParen) {
 		increment = p.expression()
 	}
 	p.consume(token.TokenType_RightParen, "Expect ')' after for clauses.")
 
-	// 4. Body
 	body := p.statement()
 
-	// Now desugar: build the while loop from the bottom up.
-
-	// If there's an increment, append it after the body
 	if increment != nil {
 		body = stmt.Block{
 			Statements: []stmt.Stmt{body, stmt.Expression{Expression: increment}},
 		}
 	}
 
-	// If no condition, default to `true` (infinite loop)
 	if condition == nil {
 		condition = expr.Literal{Value: true}
 	}
 	body = stmt.While{Condition: condition, Body: body}
 
-	// If there's an initializer, wrap everything in a block
 	if initializer != nil {
 		body = stmt.Block{Statements: []stmt.Stmt{initializer, body}}
 	}
@@ -178,22 +164,53 @@ func (p *Parser) forStatement() stmt.Stmt {
 	return body
 }
 
-// printStatement → "print" expression ";"
+// funDeclaration parses function declarations. `kind` is used in error messages
+// ("function" now, "method" for classes later).
+func (p *Parser) funDeclaration(kind string) stmt.Stmt {
+	name := p.consume(token.TokenType_Identifier, "Expect "+kind+" name.")
+	p.consume(token.TokenType_LeftParen, "Expect '(' after "+kind+" name.")
+
+	var params []*token.Token
+	if !p.check(token.TokenType_RightParen) {
+		for {
+			if len(params) >= 255 {
+				p.error(p.peek(), "Can't have more than 255 parameters.")
+			}
+			params = append(params, p.consume(token.TokenType_Identifier, "Expect parameter name."))
+			if !p.match(token.TokenType_Comma) {
+				break
+			}
+		}
+	}
+	p.consume(token.TokenType_RightParen, "Expect ')' after parameters.")
+
+	p.consume(token.TokenType_LeftBrace, "Expect '{' before "+kind+" body.")
+	body := p.block()
+	return stmt.Function{Name: name, Params: params, Body: body}
+}
+
+func (p *Parser) returnStatement() stmt.Stmt {
+	keyword := p.previous()
+	var value expr.Expr
+	if !p.check(token.TokenType_Semicolon) {
+		value = p.expression()
+	}
+	p.consume(token.TokenType_Semicolon, "Expect ';' after return value.")
+	return stmt.Return{Keyword: keyword, Value: value}
+}
+
 func (p *Parser) printStatement() stmt.Stmt {
 	value := p.expression()
 	p.consume(token.TokenType_Semicolon, "Expect ';' after value.")
 	return stmt.Print{Expression: value}
 }
 
-// expressionStatement → expression ";"
 func (p *Parser) expressionStatement() stmt.Stmt {
 	ex := p.expression()
 	p.consume(token.TokenType_Semicolon, "Expect ';' after expression.")
 	return stmt.Expression{Expression: ex}
 }
 
-// block → "{" declaration* "}"
-// Returns the list of statements inside the braces.
 func (p *Parser) block() []stmt.Stmt {
 	var statements []stmt.Stmt
 
@@ -208,27 +225,18 @@ func (p *Parser) block() []stmt.Stmt {
 	return statements
 }
 
-// expression → assignment
-// The top of the expression precedence chain now starts at assignment.
 func (p *Parser) expression() expr.Expr {
 	return p.assignment()
 }
 
-// assignment → IDENTIFIER "=" assignment | equality
-//
-// This is the trickiest parsing rule. We parse the left side as an equality
-// expression first. If we then see "=", we check that the left side was a
-// Variable — and convert it into an Assign expression.
-//
-// Why? Because we can't know it's an assignment until we see the "=".
-// The left side of an assignment isn't an expression we evaluate — it's
-// a "target" (an l-value in compiler terminology).
+// assignment parses the left side as an expression, then checks for '='.
+// If found, verifies the left side was a Variable (valid l-value).
 func (p *Parser) assignment() expr.Expr {
 	ex := p.or()
 
 	if p.match(token.TokenType_Equal) {
 		equals := p.previous()
-		value := p.assignment() // right-associative: a = b = c means a = (b = c)
+		value := p.assignment()
 
 		if v, ok := ex.(expr.Variable); ok {
 			return expr.Assign{Name: v.Name, Value: value}
@@ -240,8 +248,6 @@ func (p *Parser) assignment() expr.Expr {
 	return ex
 }
 
-// or → and ( "or" and )*
-// Lower precedence than and: `a or b and c` means `a or (b and c)`
 func (p *Parser) or() expr.Expr {
 	ex := p.and()
 
@@ -254,7 +260,6 @@ func (p *Parser) or() expr.Expr {
 	return ex
 }
 
-// and → equality ( "and" equality )*
 func (p *Parser) and() expr.Expr {
 	ex := p.equality()
 
@@ -322,7 +327,41 @@ func (p *Parser) unary() expr.Expr {
 		return expr.Unary{Operator: operator, Right: right}
 	}
 
-	return p.primary()
+	return p.call()
+}
+
+// call handles function calls: primary ( "(" args ")" )*
+func (p *Parser) call() expr.Expr {
+	ex := p.primary()
+
+	for {
+		if p.match(token.TokenType_LeftParen) {
+			ex = p.finishCall(ex)
+		} else {
+			break
+		}
+	}
+
+	return ex
+}
+
+func (p *Parser) finishCall(callee expr.Expr) expr.Expr {
+	var arguments []expr.Expr
+
+	if !p.check(token.TokenType_RightParen) {
+		for {
+			if len(arguments) >= 255 {
+				p.error(p.peek(), "Can't have more than 255 arguments.")
+			}
+			arguments = append(arguments, p.expression())
+			if !p.match(token.TokenType_Comma) {
+				break
+			}
+		}
+	}
+
+	paren := p.consume(token.TokenType_RightParen, "Expect ')' after arguments.")
+	return expr.Call{Callee: callee, Paren: paren, Arguments: arguments}
 }
 
 func (p *Parser) primary() expr.Expr {
@@ -342,7 +381,6 @@ func (p *Parser) primary() expr.Expr {
 		return expr.Literal{Value: p.previous().Literal}
 	}
 
-	// Variable access — an identifier by itself is a variable read
 	if p.match(token.TokenType_Identifier) {
 		return expr.Variable{Name: p.previous()}
 	}
@@ -368,8 +406,6 @@ func (p *Parser) match(types ...token.TokenType) bool {
 	return false
 }
 
-// consume checks the next token is the expected type. If not, panics with a ParseError.
-// The panic is caught by declaration()'s recover, which calls synchronize().
 func (p *Parser) consume(t token.TokenType, message string) *token.Token {
 	if p.check(t) {
 		return p.advance()
@@ -377,7 +413,6 @@ func (p *Parser) consume(t token.TokenType, message string) *token.Token {
 	panic(p.error(p.peek(), message))
 }
 
-// error reports a parse error to the VM and returns the error (for panicking).
 func (p *Parser) error(tok *token.Token, message string) ParseError {
 	err := ParseError{Token: tok, Message: message}
 	p.vm.ReportParseError(err)
@@ -416,8 +451,7 @@ func (p *Parser) previous() *token.Token {
 	return p.tokens[p.current-1]
 }
 
-// synchronize skips tokens until we hit a statement boundary.
-// Called after a parse error so we can keep parsing the rest of the file.
+// synchronize skips tokens until a statement boundary after a parse error.
 func (p *Parser) synchronize() {
 	p.advance()
 	for !p.isAtEnd() {

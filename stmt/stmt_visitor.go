@@ -1,12 +1,5 @@
 package stmt
 
-// Accept methods — each statement type delegates to the right visitor method.
-// This is the same pattern you have in expr/expr_visitor.go.
-//
-// Why the visitor pattern? It lets us add new operations (interpret, print, resolve)
-// without modifying the statement types themselves. Each operation is a new
-// struct that implements StmtVisitor.
-
 func (s Expression) Accept(visitor StmtVisitor) {
 	visitor.VisitExpressionStmt(s)
 }
@@ -29,4 +22,12 @@ func (s If) Accept(visitor StmtVisitor) {
 
 func (s While) Accept(visitor StmtVisitor) {
 	visitor.VisitWhileStmt(s)
+}
+
+func (s Function) Accept(visitor StmtVisitor) {
+	visitor.VisitFunctionStmt(s)
+}
+
+func (s Return) Accept(visitor StmtVisitor) {
+	visitor.VisitReturnStmt(s)
 }
