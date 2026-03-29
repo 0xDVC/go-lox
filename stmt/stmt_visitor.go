@@ -31,3 +31,7 @@ func (s Function) Accept(visitor StmtVisitor) {
 func (s Return) Accept(visitor StmtVisitor) {
 	visitor.VisitReturnStmt(s)
 }
+
+func (s Class) Accept(visitor StmtVisitor) {
+	visitor.VisitClassStmt(s)
+}

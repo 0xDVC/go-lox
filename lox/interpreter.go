@@ -2,6 +2,7 @@ package lox
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/0xdvc/go-lox/expr"
 	"github.com/0xdvc/go-lox/stmt"
@@ -21,9 +22,10 @@ type Interpreter struct {
 	globals     *Environment
 	environment *Environment
 	locals      map[expr.Expr]int
+	writer      io.Writer
 }
 
-func NewInterpreter() *Interpreter {
+func NewInterpreter(writer io.Writer) *Interpreter {
 	globals := NewEnvironment()
 	globals.Define("clock", ClockNative)
 
@@ -31,6 +33,7 @@ func NewInterpreter() *Interpreter {
 		globals:     globals,
 		environment: globals,
 		locals:      make(map[expr.Expr]int),
+		writer:      writer,
 	}
 }
 
@@ -55,7 +58,7 @@ func (i *Interpreter) execute(s stmt.Stmt) {
 	s.Accept(i)
 }
 
-// --- Statement visitors ---
+// Statement visitors.
 
 func (i *Interpreter) VisitExpressionStmt(s stmt.Expression) {
 	i.evaluate(s.Expression)
@@ -63,7 +66,7 @@ func (i *Interpreter) VisitExpressionStmt(s stmt.Expression) {
 
 func (i *Interpreter) VisitPrintStmt(s stmt.Print) {
 	value := i.evaluate(s.Expression)
-	fmt.Println(i.stringify(value))
+	fmt.Fprintln(i.writer, i.stringify(value))
 }
 
 func (i *Interpreter) VisitVarStmt(s stmt.Var) {
@@ -105,11 +108,46 @@ func (i *Interpreter) VisitWhileStmt(s stmt.While) {
 }
 
 func (i *Interpreter) VisitFunctionStmt(s stmt.Function) {
-	function := NewLoxFunction(s, i.environment)
+	function := NewLoxFunction(s, i.environment, false)
 	i.environment.Define(s.Name.Lexeme, function)
 }
 
-// VisitReturnStmt panics with ReturnValue to unwind back to LoxFunction.Call().
+func (i *Interpreter) VisitClassStmt(s stmt.Class) {
+	var superclass any
+	if s.Superclass != nil {
+		superclass = i.evaluate(s.Superclass)
+		if _, ok := superclass.(*LoxClass); !ok {
+			panic(&RuntimeError{Token: s.Superclass.Name, Message: "Superclass must be a class."})
+		}
+	}
+
+	i.environment.Define(s.Name.Lexeme, nil)
+
+	// If there's a superclass, create a scope with "super" bound to it.
+	if s.Superclass != nil {
+		i.environment = NewEnclosedEnvironment(i.environment)
+		i.environment.Define("super", superclass)
+	}
+
+	methods := make(map[string]*LoxFunction)
+	for _, method := range s.Methods {
+		isInit := method.Name.Lexeme == "init"
+		methods[method.Name.Lexeme] = NewLoxFunction(method, i.environment, isInit)
+	}
+
+	var sc *LoxClass
+	if superclass != nil {
+		sc = superclass.(*LoxClass)
+	}
+	class := &LoxClass{Name: s.Name.Lexeme, Superclass: sc, Methods: methods}
+
+	if s.Superclass != nil {
+		i.environment = i.environment.enclosing
+	}
+
+	i.environment.Assign(s.Name, class)
+}
+
 func (i *Interpreter) VisitReturnStmt(s stmt.Return) {
 	var value any
 	if s.Value != nil {
@@ -118,7 +156,7 @@ func (i *Interpreter) VisitReturnStmt(s stmt.Return) {
 	panic(ReturnValue{Value: value})
 }
 
-// --- Expression visitors ---
+// Expression visitors.
 
 func (i *Interpreter) VisitCallExpr(e expr.Call) interface{} {
 	callee := i.evaluate(e.Callee)
@@ -141,6 +179,42 @@ func (i *Interpreter) VisitCallExpr(e expr.Call) interface{} {
 	}
 
 	return function.Call(i, arguments)
+}
+
+func (i *Interpreter) VisitGetExpr(e expr.Get) interface{} {
+	object := i.evaluate(e.Object)
+	if inst, ok := object.(*LoxInstance); ok {
+		return inst.Get(e.Name)
+	}
+	panic(&RuntimeError{Token: e.Name, Message: "Only instances have properties."})
+}
+
+func (i *Interpreter) VisitSetExpr(e expr.Set) interface{} {
+	object := i.evaluate(e.Object)
+	inst, ok := object.(*LoxInstance)
+	if !ok {
+		panic(&RuntimeError{Token: e.Name, Message: "Only instances have fields."})
+	}
+	value := i.evaluate(e.Value)
+	inst.Set(e.Name, value)
+	return value
+}
+
+func (i *Interpreter) VisitThisExpr(e expr.This) interface{} {
+	return i.lookUpVariable(e.Keyword, e)
+}
+
+func (i *Interpreter) VisitSuperExpr(e expr.Super) interface{} {
+	distance := i.locals[e]
+	superclass := i.environment.GetAt(distance, "super").(*LoxClass)
+	// "this" is always one scope inside "super"
+	object := i.environment.GetAt(distance-1, "this").(*LoxInstance)
+
+	method := superclass.FindMethod(e.Method.Lexeme)
+	if method == nil {
+		panic(&RuntimeError{Token: e.Method, Message: "Undefined property '" + e.Method.Lexeme + "'."})
+	}
+	return method.Bind(object)
 }
 
 func (i *Interpreter) VisitLiteralExpr(e expr.Literal) interface{} {
@@ -258,7 +332,7 @@ func (i *Interpreter) VisitAssignExpr(e expr.Assign) interface{} {
 	return value
 }
 
-// --- Helpers ---
+// Helpers.
 
 func (i *Interpreter) evaluate(e expr.Expr) interface{} {
 	return e.Accept(i)
@@ -305,6 +379,12 @@ func (i *Interpreter) stringify(obj interface{}) string {
 	}
 	if fn, ok := obj.(*NativeFunction); ok {
 		return fn.String()
+	}
+	if c, ok := obj.(*LoxClass); ok {
+		return c.String()
+	}
+	if inst, ok := obj.(*LoxInstance); ok {
+		return inst.String()
 	}
 	return fmt.Sprintf("%v", obj)
 }

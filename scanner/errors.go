@@ -2,10 +2,9 @@ package scanner
 
 import "errors"
 
-var ErrUnterminatedString = errors.New("unterminated string")
-
-var ErrInvalidNumberLiteral = errors.New("invalid number literal")
-
-var ErrUnexpectedCharacter = errors.New("unexpected character")
-
-var ErrUnterminatedComment = errors.New("multiline comment met EOF")
+var (
+	ErrUnterminatedString   = errors.New("unterminated string")
+	ErrInvalidNumberLiteral = errors.New("invalid number literal")
+	ErrUnexpectedCharacter  = errors.New("unexpected character")
+	ErrUnterminatedComment  = errors.New("multiline comment met EOF")
+)

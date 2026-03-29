@@ -52,6 +52,9 @@ func (p *Parser) declaration() stmt.Stmt {
 		}
 	}()
 
+	if p.match(token.TokenType_Class) {
+		return p.classDeclaration()
+	}
 	if p.match(token.TokenType_Fun) {
 		return p.funDeclaration("function")
 	}
@@ -164,8 +167,27 @@ func (p *Parser) forStatement() stmt.Stmt {
 	return body
 }
 
-// funDeclaration parses function declarations. `kind` is used in error messages
-// ("function" now, "method" for classes later).
+func (p *Parser) classDeclaration() stmt.Stmt {
+	name := p.consume(token.TokenType_Identifier, "Expect class name.")
+
+	var superclass *expr.Variable
+	if p.match(token.TokenType_Less) {
+		p.consume(token.TokenType_Identifier, "Expect superclass name.")
+		v := expr.Variable{Name: p.previous()}
+		superclass = &v
+	}
+
+	p.consume(token.TokenType_LeftBrace, "Expect '{' before class body.")
+
+	var methods []stmt.Function
+	for !p.check(token.TokenType_RightBrace) && !p.isAtEnd() {
+		methods = append(methods, p.funDeclaration("method").(stmt.Function))
+	}
+
+	p.consume(token.TokenType_RightBrace, "Expect '}' after class body.")
+	return stmt.Class{Name: name, Superclass: superclass, Methods: methods}
+}
+
 func (p *Parser) funDeclaration(kind string) stmt.Stmt {
 	name := p.consume(token.TokenType_Identifier, "Expect "+kind+" name.")
 	p.consume(token.TokenType_LeftParen, "Expect '(' after "+kind+" name.")
@@ -240,6 +262,10 @@ func (p *Parser) assignment() expr.Expr {
 
 		if v, ok := ex.(expr.Variable); ok {
 			return expr.Assign{Name: v.Name, Value: value}
+		}
+
+		if g, ok := ex.(expr.Get); ok {
+			return expr.Set{Object: g.Object, Name: g.Name, Value: value}
 		}
 
 		p.error(equals, "Invalid assignment target.")
@@ -337,6 +363,9 @@ func (p *Parser) call() expr.Expr {
 	for {
 		if p.match(token.TokenType_LeftParen) {
 			ex = p.finishCall(ex)
+		} else if p.match(token.TokenType_Dot) {
+			name := p.consume(token.TokenType_Identifier, "Expect property name after '.'.")
+			ex = expr.Get{Object: ex, Name: name}
 		} else {
 			break
 		}
@@ -381,6 +410,17 @@ func (p *Parser) primary() expr.Expr {
 		return expr.Literal{Value: p.previous().Literal}
 	}
 
+	if p.match(token.TokenType_Super) {
+		keyword := p.previous()
+		p.consume(token.TokenType_Dot, "Expect '.' after 'super'.")
+		method := p.consume(token.TokenType_Identifier, "Expect superclass method name.")
+		return expr.Super{Keyword: keyword, Method: method}
+	}
+
+	if p.match(token.TokenType_This) {
+		return expr.This{Keyword: p.previous()}
+	}
+
 	if p.match(token.TokenType_Identifier) {
 		return expr.Variable{Name: p.previous()}
 	}
@@ -394,7 +434,7 @@ func (p *Parser) primary() expr.Expr {
 	panic(p.error(p.peek(), "Expect expression."))
 }
 
-// --- Helper methods ---
+// Helper methods.
 
 func (p *Parser) match(types ...token.TokenType) bool {
 	for _, t := range types {

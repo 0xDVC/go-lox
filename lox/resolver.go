@@ -9,17 +9,26 @@ import (
 type functionType int
 
 const (
-	ftNone     functionType = iota
+	ftNone functionType = iota
 	ftFunction
+	ftInitializer
+	ftMethod
 )
 
-// Resolver performs static analysis between parsing and interpreting.
-// It records, for each variable usage, how many scopes away its declaration lives.
+type classType int
+
+const (
+	ctNone classType = iota
+	ctClass
+	ctSubclass
+)
+
 type Resolver struct {
 	interpreter     *Interpreter
 	vm              resolverVM
-	scopes          []map[string]bool // bool = fully defined?
+	scopes          []map[string]bool
 	currentFunction functionType
+	currentClass    classType
 }
 
 type resolverVM interface {
@@ -55,7 +64,6 @@ func (r *Resolver) endScope() {
 	r.scopes = r.scopes[:len(r.scopes)-1]
 }
 
-// declare marks a variable as "not ready" (step 1 of declare/define).
 func (r *Resolver) declare(name *token.Token) {
 	if len(r.scopes) == 0 {
 		return
@@ -67,7 +75,6 @@ func (r *Resolver) declare(name *token.Token) {
 	scope[name.Lexeme] = false
 }
 
-// define marks a variable as "ready" (step 2).
 func (r *Resolver) define(name *token.Token) {
 	if len(r.scopes) == 0 {
 		return
@@ -75,8 +82,6 @@ func (r *Resolver) define(name *token.Token) {
 	r.scopes[len(r.scopes)-1][name.Lexeme] = true
 }
 
-// resolveLocal finds the variable's declaration in the scope stack
-// and tells the interpreter the distance. If not found, it's global.
 func (r *Resolver) resolveLocal(e expr.Expr, name *token.Token) {
 	for i := len(r.scopes) - 1; i >= 0; i-- {
 		if _, ok := r.scopes[i][name.Lexeme]; ok {
@@ -101,7 +106,7 @@ func (r *Resolver) resolveFunction(f stmt.Function, ft functionType) {
 	r.currentFunction = enclosingFunction
 }
 
-// --- Statement visitors ---
+// Statement visitors.
 
 func (r *Resolver) VisitBlockStmt(s stmt.Block) {
 	r.beginScope()
@@ -119,8 +124,48 @@ func (r *Resolver) VisitVarStmt(s stmt.Var) {
 
 func (r *Resolver) VisitFunctionStmt(s stmt.Function) {
 	r.declare(s.Name)
-	r.define(s.Name) // define early so the function can recurse
+	r.define(s.Name)
 	r.resolveFunction(s, ftFunction)
+}
+
+func (r *Resolver) VisitClassStmt(s stmt.Class) {
+	enclosingClass := r.currentClass
+	r.currentClass = ctClass
+
+	r.declare(s.Name)
+	r.define(s.Name)
+
+	if s.Superclass != nil {
+		if s.Superclass.Name.Lexeme == s.Name.Lexeme {
+			r.vm.ReportResolveError(s.Superclass.Name, "A class can't inherit from itself.")
+		}
+		r.currentClass = ctSubclass
+		r.resolveExpr(s.Superclass)
+
+		// Create a scope for "super"
+		r.beginScope()
+		r.scopes[len(r.scopes)-1]["super"] = true
+	}
+
+	// Create a scope for "this"
+	r.beginScope()
+	r.scopes[len(r.scopes)-1]["this"] = true
+
+	for _, method := range s.Methods {
+		ft := ftMethod
+		if method.Name.Lexeme == "init" {
+			ft = ftInitializer
+		}
+		r.resolveFunction(method, ft)
+	}
+
+	r.endScope() // "this" scope
+
+	if s.Superclass != nil {
+		r.endScope() // "super" scope
+	}
+
+	r.currentClass = enclosingClass
 }
 
 func (r *Resolver) VisitExpressionStmt(s stmt.Expression) {
@@ -144,6 +189,9 @@ func (r *Resolver) VisitReturnStmt(s stmt.Return) {
 		r.vm.ReportResolveError(s.Keyword, "Can't return from top-level code.")
 	}
 	if s.Value != nil {
+		if r.currentFunction == ftInitializer {
+			r.vm.ReportResolveError(s.Keyword, "Can't return a value from an initializer.")
+		}
 		r.resolveExpr(s.Value)
 	}
 }
@@ -153,7 +201,7 @@ func (r *Resolver) VisitWhileStmt(s stmt.While) {
 	r.resolveStmt(s.Body)
 }
 
-// --- Expression visitors ---
+// Expression visitors.
 
 func (r *Resolver) VisitVariableExpr(e expr.Variable) interface{} {
 	if len(r.scopes) > 0 {
@@ -182,6 +230,36 @@ func (r *Resolver) VisitCallExpr(e expr.Call) interface{} {
 	for _, arg := range e.Arguments {
 		r.resolveExpr(arg)
 	}
+	return nil
+}
+
+func (r *Resolver) VisitGetExpr(e expr.Get) interface{} {
+	r.resolveExpr(e.Object)
+	return nil
+}
+
+func (r *Resolver) VisitSetExpr(e expr.Set) interface{} {
+	r.resolveExpr(e.Value)
+	r.resolveExpr(e.Object)
+	return nil
+}
+
+func (r *Resolver) VisitThisExpr(e expr.This) interface{} {
+	if r.currentClass == ctNone {
+		r.vm.ReportResolveError(e.Keyword, "Can't use 'this' outside of a class.")
+		return nil
+	}
+	r.resolveLocal(e, e.Keyword)
+	return nil
+}
+
+func (r *Resolver) VisitSuperExpr(e expr.Super) interface{} {
+	if r.currentClass == ctNone {
+		r.vm.ReportResolveError(e.Keyword, "Can't use 'super' outside of a class.")
+	} else if r.currentClass != ctSubclass {
+		r.vm.ReportResolveError(e.Keyword, "Can't use 'super' in a class with no superclass.")
+	}
+	r.resolveLocal(e, e.Keyword)
 	return nil
 }
 

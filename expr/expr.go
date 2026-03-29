@@ -12,6 +12,10 @@ type Visitor interface {
 	VisitAssignExpr(expr Assign) interface{}
 	VisitLogicalExpr(expr Logical) interface{}
 	VisitCallExpr(expr Call) interface{}
+	VisitGetExpr(expr Get) interface{}
+	VisitSetExpr(expr Set) interface{}
+	VisitThisExpr(expr This) interface{}
+	VisitSuperExpr(expr Super) interface{}
 }
 
 type Expr interface {
@@ -64,4 +68,24 @@ type Call struct {
 	Callee    Expr
 	Paren     *token.Token // closing ')' for error reporting
 	Arguments []Expr
+}
+
+type Get struct {
+	Object Expr
+	Name   *token.Token
+}
+
+type Set struct {
+	Object Expr
+	Name   *token.Token
+	Value  Expr
+}
+
+type This struct {
+	Keyword *token.Token
+}
+
+type Super struct {
+	Keyword *token.Token
+	Method  *token.Token
 }

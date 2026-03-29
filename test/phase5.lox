@@ -1,0 +1,127 @@
+// Phase 5: Classes & Inheritance
+
+// Basic class
+class Cake {
+  taste() {
+    return "delicious";
+  }
+}
+
+print Cake;
+var cake = Cake();
+print cake;
+print cake.taste();
+
+// Fields
+class Point {
+  init(x, y) {
+    this.x = x;
+    this.y = y;
+  }
+}
+
+var p = Point(3, 4);
+print p.x;
+print p.y;
+
+// Methods with this
+class Counter {
+  init() {
+    this.count = 0;
+  }
+  increment() {
+    this.count = this.count + 1;
+  }
+  value() {
+    return this.count;
+  }
+}
+
+var c = Counter();
+c.increment();
+c.increment();
+c.increment();
+print c.value();
+
+// Inheritance
+class Animal {
+  init(name) {
+    this.name = name;
+  }
+  speak() {
+    print this.name + " makes a sound.";
+  }
+}
+
+class Dog < Animal {
+  speak() {
+    print this.name + " barks!";
+  }
+}
+
+class Cat < Animal {
+  speak() {
+    print this.name + " meows!";
+  }
+}
+
+var rex = Dog("Rex");
+rex.speak();
+var whiskers = Cat("Whiskers");
+whiskers.speak();
+
+// super
+class GuideDog < Dog {
+  speak() {
+    super.speak();
+    print this.name + " then guides you.";
+  }
+}
+
+var buddy = GuideDog("Buddy");
+buddy.speak();
+
+// init returns this
+class Builder {
+  init() {
+    this.items = 0;
+  }
+  add() {
+    this.items = this.items + 1;
+    return this;
+  }
+}
+
+var b = Builder();
+b.add().add().add();
+print b.items;
+
+// Fields shadow methods
+class Shadow {
+  method() {
+    return "method";
+  }
+}
+
+var s = Shadow();
+print s.method();
+s.method = "field";
+print s.method;
+
+// Method as callback
+class Greeter {
+  init(name) {
+    this.name = name;
+  }
+  greet() {
+    print "Hi, " + this.name;
+  }
+}
+
+var g = Greeter("World");
+var fn = g.greet;
+fn();
+
+// Inherited methods
+var animal = Animal("Generic");
+animal.speak();

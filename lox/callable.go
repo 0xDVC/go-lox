@@ -14,12 +14,13 @@ type LoxCallable interface {
 
 // LoxFunction wraps a function declaration and its closure environment.
 type LoxFunction struct {
-	declaration stmt.Function
-	closure     *Environment
+	declaration   stmt.Function
+	closure       *Environment
+	isInitializer bool
 }
 
-func NewLoxFunction(declaration stmt.Function, closure *Environment) *LoxFunction {
-	return &LoxFunction{declaration: declaration, closure: closure}
+func NewLoxFunction(declaration stmt.Function, closure *Environment, isInitializer bool) *LoxFunction {
+	return &LoxFunction{declaration: declaration, closure: closure, isInitializer: isInitializer}
 }
 
 func (f *LoxFunction) Arity() int {
@@ -37,7 +38,11 @@ func (f *LoxFunction) Call(interpreter *Interpreter, arguments []any) (result an
 	defer func() {
 		if r := recover(); r != nil {
 			if rv, ok := r.(ReturnValue); ok {
-				result = rv.Value
+				if f.isInitializer {
+					result = f.closure.GetAt(0, "this")
+				} else {
+					result = rv.Value
+				}
 			} else {
 				panic(r)
 			}
@@ -45,7 +50,17 @@ func (f *LoxFunction) Call(interpreter *Interpreter, arguments []any) (result an
 	}()
 
 	interpreter.executeBlock(f.declaration.Body, env)
+	if f.isInitializer {
+		return f.closure.GetAt(0, "this")
+	}
 	return nil
+}
+
+// Bind creates a new LoxFunction with `this` bound to the given instance.
+func (f *LoxFunction) Bind(instance *LoxInstance) *LoxFunction {
+	env := NewEnclosedEnvironment(f.closure)
+	env.Define("this", instance)
+	return NewLoxFunction(f.declaration, env, f.isInitializer)
 }
 
 func (f *LoxFunction) String() string {

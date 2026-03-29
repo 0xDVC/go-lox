@@ -14,6 +14,7 @@ type StmtVisitor interface {
 	VisitWhileStmt(stmt While)
 	VisitFunctionStmt(stmt Function)
 	VisitReturnStmt(stmt Return)
+	VisitClassStmt(stmt Class)
 }
 
 type Stmt interface {
@@ -58,4 +59,10 @@ type Function struct {
 type Return struct {
 	Keyword *token.Token
 	Value   expr.Expr
+}
+
+type Class struct {
+	Name       *token.Token
+	Superclass *expr.Variable // nil if no superclass
+	Methods    []Function
 }

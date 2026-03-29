@@ -1,31 +1,31 @@
 // Phase 3: Functions
 
-// --- Basic function ---
+// Basic function
 fun greet(name) {
   print "Hello, " + name + "!";
 }
 greet("world");
 
-// --- Return values ---
+// Return values
 fun add(a, b) {
   return a + b;
 }
 print add(2, 3);
 
-// --- Recursion: fibonacci ---
+// Recursion: fibonacci
 fun fib(n) {
   if (n <= 1) return n;
   return fib(n - 1) + fib(n - 2);
 }
 print fib(10);
 
-// --- No return = nil ---
+// No return = nil
 fun noReturn() {
   var x = 1;
 }
 print noReturn();
 
-// --- Closures ---
+// Closures
 fun makeCounter() {
   var count = 0;
   fun increment() {
@@ -40,7 +40,7 @@ print counter();
 print counter();
 print counter();
 
-// --- Two independent closures ---
+// Two independent closures
 var c1 = makeCounter();
 var c2 = makeCounter();
 print c1();
@@ -48,19 +48,19 @@ print c2();
 print c1();
 print c2();
 
-// --- Functions are first-class values ---
+// Functions are first-class values
 fun square(x) { return x * x; }
 fun apply(f, x) { return f(x); }
 print apply(square, 5);
 
-// --- Native function: clock ---
+// Native function: clock
 var t = clock();
 print t > 0;
 
-// --- Print function value ---
+// Print function value
 print square;
 
-// --- Nested closures ---
+// Nested closures
 fun makeAdder(x) {
   fun adder(y) {
     return x + y;
